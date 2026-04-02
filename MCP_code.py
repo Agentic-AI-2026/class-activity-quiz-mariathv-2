@@ -1,56 +1,79 @@
-from langchain_ollama import ChatOllama
-from langchain_anthropic import ChatAnthropic
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, AIMessage
+"""
+Helper utilities for MCP tool loading.
+
+This file is intentionally *not* tied to any specific LLM provider.
+It exists to provide a valid, importable MCP tools helper (no Ollama).
+"""
+
+from __future__ import annotations
+
+import subprocess
+import time
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+
+import requests
 from langchain_mcp_adapters.client import MultiServerMCPClient
-import os, json, re, asyncio, subprocess, time, threading, requests
-from langchain_mcp_adapters.client import MultiServerMCPClient
-import nest_asyncio
-nest_asyncio.apply()
-
-mcp = MultiServerMCPClient({
-    "math": {
-        "command": sys.executable,     # Full Python path e.g. C:\anaconda3\python.exe
-        "args": ["math_server.py"],    # Must be in same folder as notebook
-        "transport": "stdio",          # Communicate via stdin/stdout pipes
-    },
-    "data": {
-        "command": sys.executable,     # Full Python path e.g. C:\anaconda3\python.exe
-        "args": ["data_server.py"],    # Must be in same folder as notebook
-        "transport": "stdio",          # Communicate via stdin/stdout pipes
-    },
-    "search": {
-        "command": sys.executable,     # Full Python path e.g. C:\anaconda3\python.exe
-        "args": ["search_server.py"],    # Must be in same folder as notebook
-        "transport": "stdio",          # Communicate via stdin/stdout pipes
-    },
-    # REMOTE server — already running, connect via HTTP
-    "weather": {
-        "url": "http://localhost:8000/mcp",
-        "transport": "streamable_http",
-    }
-})
 
 
-# ─── MCP Client Factory ───────────────────────────────────────────────────────
-# Returns LangChain tools loaded from specified MCP servers
+def _start_weather_server(python_exe: str, weather_script: Path) -> subprocess.Popen[str]:
+    # Starts the weather MCP server locally over HTTP (FastMCP default port is commonly 8000).
+    return subprocess.Popen(
+        [python_exe, str(weather_script)],
+        cwd=str(weather_script.parent),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
-async def get_mcp_tools(servers: list) -> tuple:
+
+def _wait_for_weather(url: str, timeout_s: int = 10) -> None:
+    deadline = time.time() + timeout_s
+    last_err: Optional[Exception] = None
+    while time.time() < deadline:
+        try:
+            requests.get(url, timeout=2)
+            return
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            time.sleep(0.5)
+    raise RuntimeError(f"Weather MCP server did not become ready. Last error: {last_err!r}")
+
+
+async def create_tools_map(
+    *,
+    python_exe: str,
+    project_root: Path,
+    start_weather: bool = True,
+) -> Tuple[Dict[str, Any], Optional[subprocess.Popen[str]]]:
     """
-    servers: list of server names to connect to.
-    Options: 'search', 'math', 'weather', 'data'
-    Returns: (tools_list, tools_map, mcp_client)
+    Returns (tools_map, weather_process_handle).
+    The caller is responsible for terminating the weather process (if started).
     """
-    tools = []
-    print("Getting Tools")
-    for server in servers:
-        tool = await mcp.get_tools(server_name=server)
-        tools.extend(tool)
-    t_map  = {t.name: t for t in tools}
-    print(f" MCP tools loaded: {list(t_map.keys())}")
-    return tools, t_map
 
-print(" MCP client helper ready")
+    math_script = project_root / "Tools" / "math_server.py"
+    search_script = project_root / "Tools" / "search_server.py"
+    weather_script = project_root / "Tools" / "weather_server.py"
 
-tools, tools_map = await get_mcp_tools(["search", "math"])
+    weather_proc: Optional[subprocess.Popen[str]] = None
+    if start_weather:
+        weather_proc = _start_weather_server(python_exe, weather_script)
+        _wait_for_weather("http://localhost:8000/mcp", timeout_s=12)
+
+    mcp = MultiServerMCPClient(
+        {
+            "math": {"command": python_exe, "args": [str(math_script)], "transport": "stdio"},
+            "search": {"command": python_exe, "args": [str(search_script)], "transport": "stdio"},
+            "weather": {"url": "http://localhost:8000/mcp", "transport": "streamable_http"},
+        }
+    )
+
+    tools_map: Dict[str, Any] = {}
+    for server_name in ["math", "search", "weather"]:
+        try:
+            tools = await mcp.get_tools(server_name=server_name)
+            for t in tools:
+                tools_map[t.name] = t
+        except Exception:
+            continue
+
+    return tools_map, weather_proc

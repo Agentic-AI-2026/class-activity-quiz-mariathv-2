@@ -1,16 +1,16 @@
 # ─── PLANNER-EXECUTOR AGENT with MCP Tools ────────────────────────────────────
 
 PLAN_SYSTEM = """Break the user goal into an ordered JSON list of steps.
-                Each step MUST follow this EXACT schema:
-                  {"step": int, "description": str, "tool": str or null, "args": dict or null}
-                
-                Available MCP tools and their EXACT argument names:
-                  - fetch_wikipedia(topic: str)       → look up a topic on Wikipedia
-                  - fetch_data_source(source: str)    → source must be one of: sales, customers, expenses
-                  - get_weather(city: str)            → get real weather for a city
-                
-                Use null for tool/args on synthesis or writing steps.
-                Return ONLY a valid JSON array. No markdown, no explanation."""
+Each step MUST follow this EXACT schema:
+  {"step": int, "description": str, "tool": str or null, "args": dict or null}
+
+Available MCP tools and their EXACT argument names:
+  - fetch_wikipedia(topic: str)       → look up a topic on Wikipedia
+  - fetch_data_source(source: str)    → source must be one of: sales, customers, expenses
+  - get_weather(city: str)            → get real weather for a city
+
+Use null for tool/args on synthesis or writing steps.
+Return ONLY a valid JSON array. No markdown, no explanation."""
 
 TOOL_ARG_MAP = {
     "fetch_wikipedia":  "topic",

@@ -7,7 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from tavily import TavilyClient
 
 # Replace with your actual key from tavily.com
-TAVILY_API_KEY = ""
+TAVILY_API_KEY = "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"
 
 mcp = FastMCP("search")
 tavily = TavilyClient(api_key=TAVILY_API_KEY)

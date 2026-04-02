@@ -1,0 +1,35 @@
+# from: C:\Dev\Assignments\AgenticAI\Activity\Activity-1-main
+
+# 1) Recreate requirements.txt
+@'
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langchain-groq>=0.2.0
+langchain-mcp-adapters>=0.2.0
+mcp>=1.1.0
+requests>=2.31.0
+tavily-python>=0.5.0
+colorama>=0.4.6
+'@ | Set-Content -Path .\requirements.txt
+
+# 2) Create venv
+python -m venv .venv_win
+
+# 3) Activate venv
+.\.venv_win\Scripts\Activate.ps1
+
+# 4) Upgrade pip
+python -m pip install --upgrade pip
+
+# 5) Install dependencies
+pip install -r .\requirements.txt
+
+# 6) Set env vars (per current terminal session)
+$env:GROQ_API_KEY=""
+$env:TAVILY_API_KEY=""
+$env:GROQ_MODEL="llama-3.3-70b-versatile"
+
+# 7) Run
+python .\main.py
+# or:
+python .\main.py "Plan an outdoor event for 150 people: calculate tables/chairs, find average ticket price, check weather, and summarize."
